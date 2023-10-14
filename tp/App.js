@@ -6,9 +6,11 @@ import {
   TouchableOpacity,
   Text,
   Linking,
-  Image,
+  Image
 } from 'react-native';
+import { PermissionsAndroid, Platform } from "react-native";
 import {Camera, useCameraDevices} from 'react-native-vision-camera';
+import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 
 function App() {
   const camera = useRef(null);
@@ -28,11 +30,60 @@ function App() {
     getPermission();
   }, []);
 
+
+  async function hasAndroidPermission() {
+    const getCheckPermissionPromise = () => {
+      if (Platform.Version >= 33) {
+        return Promise.all([
+          PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES),
+          PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO),
+        ]).then(
+          ([hasReadMediaImagesPermission, hasReadMediaVideoPermission]) =>
+            hasReadMediaImagesPermission && hasReadMediaVideoPermission,
+        );
+      } else {
+        return PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE);
+      }
+    };
+  
+    const hasPermission = await getCheckPermissionPromise();
+    if (hasPermission) {
+      return true;
+    }
+    const getRequestPermissionPromise = () => {
+      if (Platform.Version >= 33) {
+        return PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
+          PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO,
+        ]).then(
+          (statuses) =>
+            statuses[PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES] ===
+              PermissionsAndroid.RESULTS.GRANTED &&
+            statuses[PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO] ===
+              PermissionsAndroid.RESULTS.GRANTED,
+        );
+      } else {
+        return PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE).then((status) => status === PermissionsAndroid.RESULTS.GRANTED);
+      }
+    };
+  
+    return await getRequestPermissionPromise();
+  }
+
   const capturePhoto = async () => {
     if (camera.current !== null) {
       const photo = await camera.current.takePhoto({});
       setImageSource(photo.path);
       setShowCamera(false);
+
+      if (Platform.OS === "android" && !(await hasAndroidPermission())) {
+        return;
+      }
+
+      await CameraRoll.save(`file://${photo.path}`, {
+        type: 'photo',
+      })
+
       console.log(photo.path);
     }
   };
